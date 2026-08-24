@@ -1,4 +1,6 @@
-# Mechanisms of dymamic entity rebinding in large language models
+# Retrieval conditioned mechanism of entity rebinding in large language models
+
+https://arxiv.org/pdf/2606.08644
 
 This repository contains the code used for the experiments in the paper Mechanisms of dymamic entity rebinding in large language models. We study how instruction-tuned LLMs {Gemma-9B, Gemma-12B, Llama-3B, Llama-8B}-it implement rebinding in a dynamic state tracking. 
 
