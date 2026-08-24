@@ -2461,7 +2461,7 @@ def build_argparser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--num_entities", type=int, default=3)
-    parser.add_argument("--num_samples", type=int, default=100)
+    parser.add_argument("--num_samples", type=int, default=300)
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--query_name", type=int, default=0)
     parser.add_argument(

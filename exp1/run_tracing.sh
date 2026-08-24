@@ -10,7 +10,7 @@ python "$SCRIPT_DIR/tracing.py" \
   context \
   gemma9b \
   --vocab_tag BOXES \
-  --num_samples 100 \
+  --num_samples 300 \
   --device_id 0 \
   --num_entities 3 \
   --query_name 0 \
