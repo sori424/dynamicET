@@ -2,8 +2,7 @@
 
 https://arxiv.org/pdf/2606.08644
 
-This repository contains the code used for the experiments in the paper *A retrieval conditioned rebinding circuit for dynamic entity tracking in
-large language models*. We study how instruction-tuned Gemma and Llama models implement rebinding during dynamic state tracking.
+This repository contains the code used for the experiments in the paper *A retrieval conditioned rebinding circuit for dynamic entity tracking in large language models* EMNLP 2026 Main. We study how instruction-tuned Gemma and Llama models implement rebinding during dynamic state tracking.
 
 We conduct our experiments in four steps:
 
