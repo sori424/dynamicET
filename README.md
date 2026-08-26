@@ -11,10 +11,6 @@ We conduct our experiments in four steps:
 - **Exp 3.** Interchange intervention in attention patterns (Section 4.2)
 - **Exp 4.** Binding ID intervention (Section 5)
 
-## Code organization
-
-The original experiment entry points are unchanged. Each now delegates to smaller modules organized by responsibility.
-
 ### Experiment 1: residual-stream tracing
 
 - `tracing.py`: command-line entry point and experiment orchestration
