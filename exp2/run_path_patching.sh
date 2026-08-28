@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Run the path-patching stages, then select the circuit heads from the saved
-# [layer, head] score tensors. Environment variables below can override the
-# defaults; additional command-line arguments are forwarded to
-# run_path_patching.py.
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -28,8 +23,7 @@ RESULTS_DIR="${RESULTS_DIR:-$PROJECT_ROOT/results/path_patching/$MODEL_FOLDER}"
 CIRCUIT_JSON="${CIRCUIT_JSON:-$RESULTS_DIR/circuit.json}"
 DATAFILE="${DATAFILE:-}"
 
-# dynamicET's evaluator looks for the companion binding-iclr checkout. Its
-# run_path_patching.py is not currently included in the dynamicET repository.
+
 BINDING_ROOT="${BINDING_ROOT:-$PROJECT_ROOT/../binding-iclr}"
 PATH_PATCHING_ENTRYPOINT="${PATH_PATCHING_ENTRYPOINT:-$BINDING_ROOT/run_path_patching.py}"
 
