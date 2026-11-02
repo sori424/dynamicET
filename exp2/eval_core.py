@@ -145,13 +145,16 @@ class DictTensorDataset:
 def find_binding_root(start: Optional[Path] = None) -> Path:
     start = Path.cwd() if start is None else Path(start)
     for base in (start, *start.parents):
-        if (base / "coref").is_dir() and (base / "run_path_patching.py").exists():
+        if (base / "coref").is_dir() and (base / "exp2" / "pp_utils.py").exists():
             return base
-        nested = base / "binding-iclr"
-        if (nested / "coref").is_dir() and (nested / "run_path_patching.py").exists():
+        nested = base / "dynamicET"
+        if (nested / "coref").is_dir() and (
+            nested / "exp2" / "pp_utils.py"
+        ).exists():
             return nested
     raise FileNotFoundError(
-        "Could not find binding-iclr from the current working directory."
+        "Could not find dynamicET with its integrated coref package from the "
+        "current working directory."
     )
 
 
@@ -164,7 +167,7 @@ def import_binding_modules(binding_root: Path):
     import transformer_lens.utils as utils
     from torch.utils.data import DataLoader
 
-    import pp_utils
+    from exp2 import pp_utils
     from datasets import datascience
     from datasets.api import load_vocab
     from datasets.box import Statement
