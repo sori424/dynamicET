@@ -31,6 +31,7 @@ from functools import partial
 from pathlib import Path
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from typing import Dict, List, Optional, Sequence, Tuple
 import math
 import numpy as np
 import random
@@ -95,7 +96,6 @@ def get_caches(
         hook_points = [_z_hook_name(layer) for layer in range(_model_num_layers(model))]
     hook_name_set = set(hook_points)
 
-    apply_softmax = torch.nn.Softmax(dim=-1)
     clean_cache, corrupt_cache = {}, {}
     clean_logit_outputs, corrupt_logit_outputs = defaultdict(dict), defaultdict(dict)
 
@@ -115,8 +115,9 @@ def get_caches(
             }
 
             for i in range(batch_size):
-                logits_i = apply_softmax(
-                    logits[i, int(inp["base_last_token_indices"][i].item())]
+                logits_i = torch.softmax(
+                    logits[i, int(inp["base_last_token_indices"][i].item())].float(),
+                    dim=-1,
                 )
                 clean_logit_outputs[bi][i] = logits_i[int(inp["labels"][i].item())].item()
 
@@ -139,8 +140,9 @@ def get_caches(
             }
 
             for i in range(batch_size):
-                logits_i = apply_softmax(
-                    logits[i, int(inp["source_last_token_indices"][i].item())]
+                logits_i = torch.softmax(
+                    logits[i, int(inp["source_last_token_indices"][i].item())].float(),
+                    dim=-1,
                 )
                 corrupt_logit_outputs[bi][i] = logits_i[int(inp["labels"][i].item())].item()
 
@@ -268,6 +270,228 @@ def patching_receiver_heads(
             ]
 
     return act
+
+
+def _position_tensor(
+    batch: Dict[str, torch.Tensor],
+    prefix: str,
+    position_mode: str,
+) -> torch.Tensor:
+    """Resolve a named path-patching site to one position per example."""
+
+    if position_mode in {"last_token", "answer_colon"}:
+        key = f"{prefix}_last_token_indices"
+    else:
+        key = f"{prefix}_{position_mode}_positions"
+    if key not in batch:
+        available = sorted(
+            name
+            for name in batch
+            if name.startswith(f"{prefix}_") and name.endswith("_positions")
+        )
+        raise KeyError(
+            f"Path-patching position field {key!r} is missing. "
+            f"Available {prefix} position fields: {available}"
+        )
+    positions = batch[key]
+    if positions.ndim != 1:
+        positions = positions.reshape(positions.shape[0], -1)[:, 0]
+    return positions.to(torch.long)
+
+
+def _target_probabilities(
+    logits: torch.Tensor,
+    positions: torch.Tensor,
+    labels: torch.Tensor,
+) -> torch.Tensor:
+    """Return target-token probabilities without float16 softmax underflow."""
+
+    batch_indices = torch.arange(logits.shape[0], device=logits.device)
+    selected_logits = logits[
+        batch_indices,
+        positions.to(device=logits.device, dtype=torch.long),
+    ].float()
+    selected_labels = labels.to(device=logits.device, dtype=torch.long)
+    return torch.softmax(selected_logits, dim=-1)[batch_indices, selected_labels]
+
+
+def score_path_patching_heads(
+    *,
+    model: HookedTransformer,
+    dataloader: torch.utils.data.DataLoader,
+    clean_cache: Dict[int, Dict[str, torch.Tensor]],
+    corrupt_cache: Dict[int, Dict[str, torch.Tensor]],
+    clean_logit_outputs: Dict[int, Dict[int, float]],
+    sender_position_mode: str,
+    receiver_heads: Optional[List[Tuple[int, int]]] = None,
+    receiver_composition: Optional[str] = None,
+    receiver_position_mode: Optional[str] = None,
+    description: str = "Path patching",
+    denominator_epsilon: float = 1e-12,
+) -> torch.Tensor:
+    """Score every attention head as a sender for one greedy circuit stage.
+
+    A candidate sender's ``hook_z`` activation is replaced with its corrupt-run
+    value. For direct-to-logit stages, the resulting target probability is
+    measured immediately. For sender-to-receiver stages, the requested Q or V
+    receiver input is cached from that run and patched into a fresh clean run.
+    This second pass isolates the sender -> receiver -> logit path.
+
+    Scores are the mean relative target-probability change used in the paper::
+
+        (patched_probability - clean_probability) / clean_probability
+
+    More negative values therefore identify more important circuit heads.
+    """
+
+    has_receivers = receiver_heads is not None
+    if has_receivers:
+        if not receiver_heads:
+            raise ValueError("A receiver path requires at least one receiver head.")
+        if receiver_composition not in {"q", "v"}:
+            raise ValueError("receiver_composition must be 'q' or 'v'.")
+        if receiver_position_mode is None:
+            raise ValueError("A receiver path requires receiver_position_mode.")
+        receiver_hook_names = get_receiver_layers(
+            model,
+            receiver_heads,
+            receiver_composition,
+        )
+        receiver_hook_set = set(receiver_hook_names)
+    else:
+        if receiver_composition is not None or receiver_position_mode is not None:
+            raise ValueError(
+                "receiver_composition/receiver_position_mode require receiver_heads."
+            )
+        receiver_hook_names = []
+        receiver_hook_set = set()
+
+    num_layers = _model_num_layers(model)
+    num_heads = _model_num_heads(model)
+    scores = torch.zeros((num_layers, num_heads), dtype=torch.float32)
+    candidates = [
+        (layer_idx, head_idx)
+        for layer_idx in range(num_layers)
+        for head_idx in range(num_heads)
+    ]
+
+    with torch.no_grad():
+        for sender_layer, sender_head in tqdm(candidates, desc=description):
+            relative_change_sum = 0.0
+            example_count = 0
+            sender_hook_name = _z_hook_name(sender_layer)
+
+            for batch_idx, batch in enumerate(dataloader):
+                batch = _move_batch_to_device(batch, model)
+                batch_size = int(batch["base_tokens"].shape[0])
+                clean_sender_positions = _position_tensor(
+                    batch,
+                    "base",
+                    sender_position_mode,
+                )
+                corrupt_sender_positions = _position_tensor(
+                    batch,
+                    "source",
+                    sender_position_mode,
+                )
+                sender_hook = (
+                    sender_hook_name,
+                    partial(
+                        patching_sender_heads,
+                        model=model,
+                        clean_cache=clean_cache[batch_idx],
+                        corrupt_cache=corrupt_cache[batch_idx],
+                        base_tokens=batch["base_tokens"],
+                        sender_layer=sender_layer,
+                        sender_head=sender_head,
+                        clean_last_token_indices=batch["base_last_token_indices"],
+                        corrupt_last_token_indices=batch["source_last_token_indices"],
+                        clean_positions=clean_sender_positions,
+                        corrupt_positions=corrupt_sender_positions,
+                        batch_size=batch_size,
+                    ),
+                )
+
+                if not has_receivers:
+                    patched_logits = model.run_with_hooks(
+                        batch["base_tokens"],
+                        fwd_hooks=[sender_hook],
+                        return_type="logits",
+                    )
+                else:
+                    with model.hooks(fwd_hooks=[sender_hook]):
+                        _, receiver_cache = model.run_with_cache(
+                            batch["base_tokens"],
+                            names_filter=lambda name: name in receiver_hook_set,
+                            return_type="logits",
+                        )
+                    patched_receiver_cache = {
+                        hook_name: receiver_cache[hook_name].detach()
+                        for hook_name in receiver_hook_names
+                    }
+                    receiver_positions = _position_tensor(
+                        batch,
+                        "base",
+                        receiver_position_mode,
+                    )
+                    receiver_hooks = [
+                        (
+                            hook_name,
+                            partial(
+                                patching_receiver_heads,
+                                model=model,
+                                base_tokens=batch["base_tokens"],
+                                patched_cache=patched_receiver_cache,
+                                receiver_heads=receiver_heads,
+                                clean_last_token_indices=batch[
+                                    "base_last_token_indices"
+                                ],
+                                clean_positions=receiver_positions,
+                                batch_size=batch_size,
+                            ),
+                        )
+                        for hook_name in receiver_hook_names
+                    ]
+                    patched_logits = model.run_with_hooks(
+                        batch["base_tokens"],
+                        fwd_hooks=receiver_hooks,
+                        return_type="logits",
+                    )
+                    del receiver_cache, patched_receiver_cache
+
+                patched_probabilities = _target_probabilities(
+                    patched_logits,
+                    batch["base_last_token_indices"],
+                    batch["labels"],
+                )
+                clean_probabilities = torch.tensor(
+                    [
+                        clean_logit_outputs[batch_idx][example_idx]
+                        for example_idx in range(batch_size)
+                    ],
+                    device=patched_probabilities.device,
+                    dtype=torch.float32,
+                )
+                relative_changes = (
+                    patched_probabilities - clean_probabilities
+                ) / clean_probabilities.clamp_min(denominator_epsilon)
+                relative_change_sum += float(relative_changes.sum().item())
+                example_count += batch_size
+                del patched_logits, patched_probabilities, clean_probabilities
+
+            if example_count == 0:
+                raise ValueError("Cannot path patch an empty dataloader.")
+            score = relative_change_sum / example_count
+            if not math.isfinite(score):
+                raise FloatingPointError(
+                    f"Non-finite path-patching score for head "
+                    f"({sender_layer}, {sender_head})."
+                )
+            scores[sender_layer, sender_head] = score
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+    return scores
 
 
 def get_receiver_layers(

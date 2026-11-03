@@ -168,6 +168,7 @@ from exp2.pp_patching import (
     get_caches,
     patching_sender_heads,
     patching_receiver_heads,
+    score_path_patching_heads,
     get_receiver_layers,
     load_eval_data,
     load_ablation_data,

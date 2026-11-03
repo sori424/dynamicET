@@ -7,7 +7,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 MODEL_FOLDER="${MODEL_FOLDER:-llama8b}"
 MODEL_NAME="${MODEL_NAME:-llama-8b-hf}"
-NUM_SAMPLES="${NUM_SAMPLES:-300}"
+NUM_SAMPLES="${NUM_SAMPLES:-100}"
 BATCH_SIZE="${BATCH_SIZE:-1}"
 SEED="${SEED:-20}"
 NUM_BOXES="${NUM_BOXES:-3}"
@@ -23,19 +23,17 @@ RESULTS_DIR="${RESULTS_DIR:-$PROJECT_ROOT/results/path_patching/$MODEL_FOLDER}"
 CIRCUIT_JSON="${CIRCUIT_JSON:-$RESULTS_DIR/circuit.json}"
 DATAFILE="${DATAFILE:-}"
 
-# The path-patching producer is a companion program and is not included in
-# either dynamicET or the vendored coref package.
-BINDING_ROOT="${BINDING_ROOT:-$PROJECT_ROOT/../binding-iclr}"
-PATH_PATCHING_ENTRYPOINT="${PATH_PATCHING_ENTRYPOINT:-$BINDING_ROOT/run_path_patching.py}"
+# The producer lives beside this wrapper. PATH_PATCHING_ENTRYPOINT remains
+# overridable for backwards compatibility with older external checkouts.
+PATH_PATCHING_ENTRYPOINT="${PATH_PATCHING_ENTRYPOINT:-$SCRIPT_DIR/run_path_patching.py}"
 
 if [[ ! -f "$PATH_PATCHING_ENTRYPOINT" ]]; then
   printf 'Path-patching entry point not found: %s\n' "$PATH_PATCHING_ENTRYPOINT" >&2
-  printf 'Set PATH_PATCHING_ENTRYPOINT=/absolute/path/to/run_path_patching.py\n' >&2
   exit 1
 fi
 
 mkdir -p "$RESULTS_DIR"
-export PYTHONPATH="$PROJECT_ROOT:$BINDING_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="$PROJECT_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 pp_args=(
   --model_name "$MODEL_NAME"
@@ -47,6 +45,8 @@ pp_args=(
   --n_pos_trans "$N_POS_TRANS"
   --n_pos_detect "$N_POS_DETECT"
   --n_struct_read "$N_STRUCT_READ"
+  --n_context_reader "$N_CONTEXT_READER"
+  --prompt_format "$PROMPT_FORMAT"
   --output_path "$RESULTS_DIR/"
 )
 
