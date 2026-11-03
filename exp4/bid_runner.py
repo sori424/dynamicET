@@ -4,7 +4,6 @@ from exp4.bid_data import (
     BASE_OBJECT_IDS_BY_ENTITY,
     CONTROL_CONDITIONS,
     NUM_ENTITIES,
-    SCRIPT_DIR,
     build_binding_id_dataset,
     k_hook_name,
     load_group_b_components,
@@ -42,7 +41,7 @@ from exp4.bid_cli import (
     serialize_kv_head_mapping,
 )
 
-from datasets.api import load_vocab
+from dynamicet_data.api import load_vocab
 from exp2.pp_utils import get_model_and_tokenizer
 from exp3.head_role import (  # noqa: E402
     PROMPT_FORMATS,
@@ -142,11 +141,9 @@ def main() -> None:
     if logical_n_heads <= 0:
         logical_n_heads = max(int(head) for _, head in b_heads) + 1
     kv_n_heads = int(
-        getattr(
-            model.cfg,
-            "n_key_value_heads",
-            getattr(model.cfg, "n_kv_heads", logical_n_heads),
-        )
+        getattr(model.cfg, "n_key_value_heads", None)
+        or getattr(model.cfg, "n_kv_heads", None)
+        or logical_n_heads
     )
     vocab = load_vocab(
         args.vocab_tag,
@@ -478,9 +475,7 @@ def main() -> None:
 
     rendered = json.dumps(payload, indent=2, allow_nan=True)
     if args.output_json is not None:
-        output_path = args.output_json.expanduser()
-        if not output_path.is_absolute():
-            output_path = SCRIPT_DIR / output_path
+        output_path = args.output_json.expanduser().resolve()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(rendered + "\n", encoding="utf-8")
         print(f"Wrote {output_path}", file=sys.stderr)

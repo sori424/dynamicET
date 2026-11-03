@@ -6,7 +6,7 @@ from exp1.trace_contexts import (
     _move_batch_to_device,
 )
 
-from datasets.common import lookup_answer_logits
+from dynamicet_data.common import lookup_answer_logits
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 import json

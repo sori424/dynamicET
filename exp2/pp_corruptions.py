@@ -21,11 +21,10 @@ from exp2.pp_prompts import (
     _query_source_object,
     _slice_tensor_rows,
     _squeeze_label_tensor,
-    curr_dir,
 )
 
 from collections import defaultdict
-from datasets import Dataset
+from dynamicet_data import Dataset
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 import csv
@@ -46,7 +45,7 @@ def _default_object_pool() -> Tuple[str, ...]:
     global _DEFAULT_OBJECT_POOL
 
     if _DEFAULT_OBJECT_POOL is None:
-        objects_path = Path(curr_dir) / "coref" / "datasets" / "raw" / "objects.csv"
+        objects_path = Path(__file__).resolve().parents[1] / "dynamicet_data" / "objects.csv"
         with objects_path.open("r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             _DEFAULT_OBJECT_POOL = tuple(

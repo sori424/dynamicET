@@ -1,4 +1,4 @@
-from datasets.common import names
+from coref.datasets.common import names
 
 jobs = [
     ("stocks shelves", " store"),

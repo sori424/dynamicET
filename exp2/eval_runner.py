@@ -3,7 +3,6 @@ from __future__ import annotations
 from exp2.eval_core import (
     MODEL_NAME_BY_FOLDER,
     STAGE_FILES,
-    SYSTEM_PROMPT,
     SimpleTLUtils,
     hook_component_name,
     hook_name,
@@ -59,8 +58,11 @@ def resolve_model_results_dir(
 ) -> Path:
     candidates: List[Path] = []
     if results_dir is not None:
-        candidates.append(results_dir)
-        candidates.append(results_dir / model_folder)
+        for candidate in (results_dir, results_dir / model_folder):
+            if any((candidate / filename).is_file() for filename in STAGE_FILES.values()):
+                return candidate.resolve()
+        # An explicit directory must never silently fall back to another run.
+        return results_dir.expanduser().resolve()
     candidates.extend(
         [
             Path.cwd() / "results" / "path_patching" / model_folder,
@@ -163,7 +165,7 @@ def evaluate_one_model(args, binding_root: Path, model_folder: str) -> Dict[str,
         "prompt_id_start": args.prompt_id_start,
         "prompt_format": resolved_prompt_format,
         "requested_prompt_format": args.prompt_format,
-        "system_prompt": SYSTEM_PROMPT,
+        "system_prompt": args.system_prompt,
         "swap_pair": list(args.swap_pair),
         "counterfactual_mode": args.counterfactual_mode,
         "pos_detector_position_mode": args.pos_detector_position_mode,

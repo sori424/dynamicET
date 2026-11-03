@@ -1,9 +1,8 @@
 """Local dataset helpers for dynamicET experiments.
 
-This package intentionally provides a small ``Dataset`` class with the subset
-of the Hugging Face Dataset API used by this repository.  Keeping it local
-avoids ambiguity with the external ``datasets`` package when running scripts
-from the project root.
+The small ``Dataset`` class supports the tensor columns used by these
+experiments. The distinct package name leaves Hugging Face's ``datasets``
+available to TransformerLens and the vendored corpus loaders.
 """
 
 from __future__ import annotations

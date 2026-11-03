@@ -342,9 +342,10 @@ def build_argparser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    global SYSTEM_PROMPT
+    from exp2 import eval_core
+
     args = build_argparser().parse_args()
-    SYSTEM_PROMPT = args.system_prompt
+    eval_core.SYSTEM_PROMPT = args.system_prompt
     binding_root = find_binding_root()
     if args.model_name and len(args.models) != 1:
         raise ValueError("--model-name can only be used with a single --models entry.")

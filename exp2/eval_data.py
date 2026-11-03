@@ -88,7 +88,9 @@ def path_patching_contexts(
     shifted = shifted[1:] + shifted[:1]
     corrupt_context = vocab.default_context(
         num_entities=num_entities,
-        entities=shifted,
+        # Keep box positions fixed while changing their object assignments.
+        # Shifting both lists merely reorders sentences and preserves answers.
+        entities=list(range(num_entities)),
         attributes=shifted,
         swap_pair=swap_pair,
         query_name=query_name,

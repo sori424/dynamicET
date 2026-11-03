@@ -34,15 +34,15 @@ from tqdm import tqdm
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
-os.chdir(SCRIPT_DIR)
 
 import exp2.pp_utils  # noqa: E402
 from exp2 import pp_utils  # noqa: E402
-from datasets import datascience  # noqa: E402
-from datasets.api import load_vocab  # noqa: E402
-from datasets.box import Statement  # noqa: E402
+from dynamicet_data import datascience  # noqa: E402
+from dynamicet_data.api import load_vocab  # noqa: E402
+from dynamicet_data.box import Statement  # noqa: E402
 from exp2.pp_utils import get_model_and_tokenizer  # noqa: E402
 from exp3.head_role import (  # noqa: E402
     PROMPT_FORMATS,
@@ -62,8 +62,8 @@ from exp3.head_role import (  # noqa: E402
 NUM_ENTITIES = 3
 BASE_OBJECT_IDS_BY_ENTITY = {0: 0, 1: 1, 2: 2}
 DEFAULT_COMPONENTS_JSON = (
-    SCRIPT_DIR
-    / "results/path_patching/gemma9b/circuit_eval_metrics_pruning_heldout2.json"
+    PROJECT_ROOT
+    / "results/path_patching/llama8b/circuit_eval_metrics_pruning_heldout3.json"
 )
 DEFAULT_CONDITIONS = (
     "no_intervention",
@@ -605,11 +605,9 @@ def select_wrong_heads(model, b_heads: Sequence[Head]) -> List[Head]:
     if logical_n_heads <= 0:
         logical_n_heads = max(int(head) for _, head in b_heads) + 1
     kv_n_heads = int(
-        getattr(
-            model.cfg,
-            "n_key_value_heads",
-            getattr(model.cfg, "n_kv_heads", logical_n_heads),
-        )
+        getattr(model.cfg, "n_key_value_heads", None)
+        or getattr(model.cfg, "n_kv_heads", None)
+        or logical_n_heads
     )
     b_kv_set = {
         (

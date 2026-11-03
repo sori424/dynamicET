@@ -14,7 +14,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 import numpy as np
 import torch
 import transformer_lens.utils as utils
-from datasets import Dataset
+from dynamicet_data import Dataset
 # from peft import PeftModel
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -32,6 +32,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 MODEL_ALIASES = {
+    "llama8b": "llama-8b-hf",
+    "gemma9b": "gemma2-9b-it",
+    "gemma12b": "google/gemma-3-12b-it",
+    "qwen7b": "Qwen/Qwen2.5-7B-Instruct",
+    "qwen8b": "Qwen/Qwen3-8B",
     "llama": "llama-7b-hf",
     "llama2-7b-chat": "meta-llama/Llama-2-7b-chat-hf",
     "llama-2-7b-chat": "meta-llama/Llama-2-7b-chat-hf",

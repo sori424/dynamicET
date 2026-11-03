@@ -32,7 +32,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from datasets.common import lookup_answer_logits
+from dynamicet_data.common import lookup_answer_logits
 
 
 TRACE_CATEGORY_ALIASES = {

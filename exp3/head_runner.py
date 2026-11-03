@@ -57,7 +57,7 @@ from exp3.head_metrics import (
 )
 
 from collections import defaultdict
-from datasets.api import load_vocab
+from dynamicet_data.api import load_vocab
 from exp2.pp_utils import compute_topk_components, get_model_and_tokenizer
 from torch.utils.data import DataLoader, Dataset
 import json

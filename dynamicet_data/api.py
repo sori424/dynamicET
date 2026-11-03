@@ -12,10 +12,10 @@ from .common import (
 
 
 VOCAB_MODULES = {
-    "BOXES": "datasets.box",
+    "BOXES": "dynamicet_data.box",
 }
 TEMPLATE_MODULES = {
-    "BOXES": "datasets.box",
+    "BOXES": "dynamicet_data.box",
 }
 
 

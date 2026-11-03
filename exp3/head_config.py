@@ -37,15 +37,15 @@ import transformer_lens.utils as utils
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from datasets import datascience
-from datasets.api import load_vocab
-from datasets.box import Statement
+from dynamicet_data import datascience
+from dynamicet_data.api import load_vocab
+from dynamicet_data.box import Statement
 from exp2 import pp_utils
 from exp2.pp_utils import compute_topk_components, get_model_and_tokenizer
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_RESULTS_DIR = SCRIPT_DIR / "results" / "path_patching"
+DEFAULT_RESULTS_DIR = SCRIPT_DIR.parent / "results" / "path_patching"
 
 SITE_CHOICES = (
     "answer_colon",
@@ -207,6 +207,9 @@ def set_seed(seed: int) -> None:
 
 
 def torch_load_cpu(path: Path) -> torch.Tensor:
+    from exp2.artifacts import validate_score_artifact
+
+    validate_score_artifact(path)
     try:
         tensor = torch.load(path, map_location="cpu", weights_only=True)
     except TypeError:

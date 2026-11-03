@@ -60,7 +60,7 @@ def parse_args() -> argparse.Namespace:
             "attention heads from minimality_pruning.kept_components."
         )
     )
-    parser.add_argument("--model-name", "--model_name", default="google/gemma-2-9b-it")
+    parser.add_argument("--model-name", "--model_name", default="llama8b")
     parser.add_argument(
         "--components-json",
         "--components_json",

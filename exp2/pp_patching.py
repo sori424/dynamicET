@@ -26,7 +26,7 @@ from exp2.pp_models import (
 )
 
 from collections import defaultdict
-from datasets import Dataset
+from dynamicet_data import Dataset
 from functools import partial
 from pathlib import Path
 from torch.utils.data import DataLoader
@@ -234,11 +234,9 @@ def patching_receiver_heads(
     is_kv_receiver = hook.name.endswith("hook_k") or hook.name.endswith("hook_v")
     model_num_heads = int(getattr(model.cfg, "n_heads", act.shape[2]))
     model_num_kv_heads = int(
-        getattr(
-            model.cfg,
-            "n_key_value_heads",
-            getattr(model.cfg, "n_kv_heads", act.shape[2]),
-        )
+        getattr(model.cfg, "n_key_value_heads", None)
+        or getattr(model.cfg, "n_kv_heads", None)
+        or model_num_heads
     )
     if is_kv_receiver and act.shape[2] != model_num_heads and model_num_kv_heads > 0:
         kv_group_size = max(1, model_num_heads // model_num_kv_heads)
@@ -335,7 +333,9 @@ def score_path_patching_heads(
     value. For direct-to-logit stages, the resulting target probability is
     measured immediately. For sender-to-receiver stages, the requested Q or V
     receiver input is cached from that run and patched into a fresh clean run.
-    This second pass isolates the sender -> receiver -> logit path.
+    The second pass measures effects mediated by those receiver inputs. Other
+    intermediate components are not frozen in the first pass, so this includes
+    indirect sender-to-receiver routes, not just a single direct edge.
 
     Scores are the mean relative target-probability change used in the paper::
 

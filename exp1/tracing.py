@@ -15,7 +15,11 @@ os.environ.setdefault("TRANSFORMERS_NO_TORCHVISION", "1")
 
 import torch
 
-from tracing_utils import (
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from exp1.tracing_utils import (
     build_tracing_dataset,
     find_correct_samples,
     load_model,
@@ -27,8 +31,7 @@ from tracing_utils import (
 
 
 def configure_repo_root() -> Path:
-    repo_root = Path(__file__).resolve().parent
-    os.chdir(repo_root)
+    repo_root = Path(__file__).resolve().parent.parent
     repo_root_str = str(repo_root)
     if repo_root_str not in sys.path:
         sys.path.insert(0, repo_root_str)
@@ -36,7 +39,7 @@ def configure_repo_root() -> Path:
 
 
 REPO_ROOT = configure_repo_root()
-PROJECT_ROOT = REPO_ROOT.parent
+PROJECT_ROOT = REPO_ROOT
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 DEFAULT_RESULTS_DIR = REPO_ROOT / "results" / "tracing_entity"

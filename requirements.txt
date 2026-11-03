@@ -1,4 +1,4 @@
-# Tested dependency set for Python 3.11.
+# Python 3.11 dependency set; CPU smoke-tested on macOS arm64.
 #
 # Install the PyTorch wheel appropriate for your CUDA/ROCm platform first when
 # the default PyPI wheel is not suitable, then install this file. See:
@@ -10,6 +10,8 @@ transformer-lens==2.16.1
 transformers==4.52.4
 accelerate==1.7.0
 datasets==3.6.0
+# Newer Arrow wheels require NumPy 2; TransformerLens 2.16 uses NumPy <2.
+pyarrow==20.0.0
 sentencepiece==0.2.0
 
 # Tensor manipulation and TransformerLens-facing utilities

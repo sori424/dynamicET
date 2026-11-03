@@ -14,7 +14,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 import numpy as np
 import torch
 import transformer_lens.utils as utils
-from datasets import Dataset
+from dynamicet_data import Dataset
 # from peft import PeftModel
 from torch.utils.data import DataLoader
 from tqdm import tqdm

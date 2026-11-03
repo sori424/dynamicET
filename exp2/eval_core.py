@@ -143,7 +143,10 @@ class DictTensorDataset:
 
 
 def find_binding_root(start: Optional[Path] = None) -> Path:
-    start = Path.cwd() if start is None else Path(start)
+    if start is None:
+        # Entry points may be invoked by absolute path from any working directory.
+        return Path(__file__).resolve().parent.parent
+    start = Path(start)
     for base in (start, *start.parents):
         if (base / "coref").is_dir() and (base / "exp2" / "pp_utils.py").exists():
             return base
@@ -168,9 +171,9 @@ def import_binding_modules(binding_root: Path):
     from torch.utils.data import DataLoader
 
     from exp2 import pp_utils
-    from datasets import datascience
-    from datasets.api import load_vocab
-    from datasets.box import Statement
+    from dynamicet_data import datascience
+    from dynamicet_data.api import load_vocab
+    from dynamicet_data.box import Statement
 
     return {
         "np": np,
@@ -211,7 +214,9 @@ def normalize_device(device: Optional[str], torch_module, pp_utils) -> Any:
 
 def torch_load_cpu(path: Path):
     import torch
+    from exp2.artifacts import validate_score_artifact
 
+    validate_score_artifact(path)
     try:
         obj = torch.load(path, map_location="cpu", weights_only=True)
     except TypeError:

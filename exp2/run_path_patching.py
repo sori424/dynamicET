@@ -13,6 +13,7 @@ import os
 import random
 import re
 import sys
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Tuple
@@ -198,6 +199,10 @@ def build_argparser() -> argparse.ArgumentParser:
         default=None,
         help="Stop after this stage; useful for scheduled or incremental runs.",
     )
+    parser.add_argument("--select-circuit", action="store_true",
+                        help="Select circuit heads after completing all five stages.")
+    parser.add_argument("--circuit-json", type=Path, default=None,
+                        help="Selected circuit JSON (default: <output-path>/circuit.json).")
     return parser
 
 
@@ -233,7 +238,68 @@ def _torch_load_cpu(torch_module, path: Path):
         tensor = torch_module.load(path, map_location="cpu")
     if not isinstance(tensor, torch_module.Tensor):
         raise TypeError(f"Expected a tensor in {path}, found {type(tensor).__name__}.")
+    if tensor.ndim != 2 or tensor.numel() == 0 or not torch_module.isfinite(tensor).all():
+        raise ValueError(f"Expected finite, nonempty [layer, head] scores in {path}.")
     return tensor.detach().cpu()
+
+
+def _file_digest(path: Path) -> str:
+    from exp2.artifacts import file_digest
+
+    return file_digest(path)
+
+
+def _run_config(args) -> Dict[str, Any]:
+    # Version the data/intervention semantics so older artifacts cannot silently
+    # become results for a different experiment. Top-k affects downstream stages.
+    excluded = {"output_path", "resume", "stop_after", "device", "datafile",
+                "select_circuit", "circuit_json"}
+    config = {key: value for key, value in vars(args).items() if key not in excluded}
+    config["swap_pair"] = list(args.swap_pair)
+    config["implementation_version"] = 2
+    config["data_sha256"] = _file_digest(args.datafile) if args.datafile else None
+    return config
+
+
+def _resume_paths(args, output_path, stages, config):
+    paths = [None] * len(stages)
+    if not args.resume:
+        return paths, None
+    metadata_path = output_path / "path_patching_metadata.json"
+    if not metadata_path.exists():
+        if any(_existing_stage_path(output_path, stage) for stage in STAGES):
+            raise ValueError("Cannot resume tensors without run metadata. Use a new "
+                             "output directory or --no-resume to recompute.")
+        return paths, None
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    if metadata.get("run_config") != config:
+        raise ValueError("Saved path-patching configuration differs from this run. "
+                         "Use a new output directory or --no-resume to recompute.")
+    for index, stage in enumerate(stages):
+        saved = metadata.get("stages", {}).get(stage["name"])
+        path = output_path / stage["filename"]
+        # Once a stage is missing, all dependent stages must be recomputed.
+        if saved is None or not path.is_file():
+            break
+        if saved.get("sha256") != _file_digest(path):
+            raise ValueError(f"Saved score tensor changed: {path}. Use --no-resume.")
+        paths[index] = path
+    return paths, metadata
+
+
+def _select_circuit(args, output_path):
+    if not args.select_circuit or len(_selected_stages(args.stop_after)) != len(STAGES):
+        return
+    output_json = (args.circuit_json or output_path / "circuit.json").resolve()
+    command = [sys.executable, str(PROJECT_ROOT / "exp2" / "circuit_eval.py"),
+               "--models", _safe_model_folder(args.model_name),
+               "--model-name", args.model_name, "--results-dir", str(output_path),
+               "--output-json", str(output_json), "--prompt-format", args.prompt_format,
+               "--num-entities", str(args.num_boxes), "--no-model-eval"]
+    for stage in STAGES:
+        key = stage["k_argument"]
+        command.extend(["--" + key.replace("_", "-"), str(getattr(args, key))])
+    subprocess.run(command, check=True, cwd=PROJECT_ROOT)
 
 
 def _atomic_torch_save(torch_module, tensor, path: Path) -> None:
@@ -306,9 +372,9 @@ def _build_dataloader(args, *, model, tokenizer, torch_module, DataLoader, pp_ut
             batch_size=args.batch_size,
         ), args.prompt_format
 
-    from datasets import datascience
-    from datasets.api import load_vocab
-    from datasets.box import Statement
+    from dynamicet_data import datascience
+    from dynamicet_data.api import load_vocab
+    from dynamicet_data.box import Statement
     from exp2.eval_core import resolve_prompt_format
     from exp2.eval_data import build_box_dataset
 
@@ -389,8 +455,11 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     ).expanduser().resolve()
     output_path.mkdir(parents=True, exist_ok=True)
     metadata_path = output_path / "path_patching_metadata.json"
+    config = _run_config(args)
+    existing_paths, previous_metadata = _resume_paths(args, output_path, stages, config)
 
     base_metadata: Dict[str, Any] = {
+        "run_config": config,
         "model_name": args.model_name,
         "output_path": str(output_path),
         "datafile": str(args.datafile.resolve()) if args.datafile else None,
@@ -412,7 +481,6 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     }
 
     # A completed resumable run should not reload a multi-billion-parameter model.
-    existing_paths = [_existing_stage_path(output_path, stage) for stage in stages]
     if args.resume and all(path is not None for path in existing_paths):
         shapes = set()
         for stage, path in zip(stages, existing_paths):
@@ -447,9 +515,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             )
         if len(shapes) != 1:
             raise ValueError(f"Resumed stage tensors have inconsistent shapes: {shapes}")
-        base_metadata["reused_without_model"] = True
-        _atomic_json_dump(base_metadata, metadata_path)
+        # Preserve the original run's provenance and any later completed stages.
         print(f"Reused {len(stages)} path-patching stages in {output_path}")
+        _select_circuit(args, output_path)
         return
 
     device = _normalize_device(args.device, torch)
@@ -459,6 +527,11 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     print(f"Loading model {args.model_name} on {device}...", file=sys.stderr)
     model, tokenizer = pp_utils.get_model_and_tokenizer(args.model_name)
     model.eval()
+    model_component_count = int(model.cfg.n_layers) * int(model.cfg.n_heads)
+    for stage in stages:
+        if getattr(args, stage["k_argument"]) > model_component_count:
+            raise ValueError(f"Requested top-k for {stage['name']} exceeds the model's "
+                             f"{model_component_count} attention heads.")
     dataloader, resolved_prompt_format = _build_dataloader(
         args,
         model=model,
@@ -472,6 +545,12 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     base_metadata["device"] = str(device)
     base_metadata["resolved_prompt_format"] = resolved_prompt_format
     base_metadata["dataset_size"] = len(dataloader.dataset)
+    # Invalidate old downstream files before starting a fresh/partial run.
+    if previous_metadata:
+        for stage, path in zip(stages, existing_paths):
+            if path is not None:
+                base_metadata["stages"][stage["name"]] = previous_metadata["stages"][stage["name"]]
+    _atomic_json_dump(base_metadata, metadata_path)
 
     print("Caching clean and corrupt activations...", file=sys.stderr)
     (
@@ -495,10 +574,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     base_metadata["corrupt_target_probability_mean"] = float(np.mean(corrupt_probs))
 
     selected_by_stage: Dict[str, Sequence[Sequence[int]]] = {}
-    model_component_count = int(model.cfg.n_layers) * int(model.cfg.n_heads)
-    for stage in stages:
+    for stage, existing_path in zip(stages, existing_paths):
         started = time.monotonic()
-        existing_path = _existing_stage_path(output_path, stage)
         reused = bool(args.resume and existing_path is not None)
         if reused:
             print(f"Reusing {existing_path.name}...", file=sys.stderr)
@@ -534,10 +611,6 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
                 receiver_position_mode=stage["receiver_position"],
                 description=stage["name"],
             )
-            _atomic_torch_save(torch, tensor, output_path / stage["filename"])
-            if stage["name"] == "struct_reader_swap_target":
-                _atomic_torch_save(torch, tensor, output_path / "struct_reader.pt")
-
         if tensor.ndim != 2:
             raise ValueError(
                 f"Expected [layer, head] scores for {stage['name']}, "
@@ -549,6 +622,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
                 f"Score shape for {stage['name']} is {tuple(tensor.shape)}, "
                 f"but model shape is {expected_shape}. Use --no-resume to recompute."
             )
+        if not torch.isfinite(tensor).all():
+            raise ValueError(f"Non-finite scores for {stage['name']}; stage was not saved.")
         requested_k = int(getattr(args, stage["k_argument"]))
         if requested_k > model_component_count:
             raise ValueError(
@@ -562,6 +637,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             return_values=True,
         )
         selected_by_stage[stage["name"]] = heads
+        _atomic_torch_save(torch, tensor, output_path / stage["filename"])
+        if stage["name"] == "struct_reader_swap_target":
+            _atomic_torch_save(torch, tensor, output_path / "struct_reader.pt")
         base_metadata["stages"][stage["name"]] = _stage_metadata(
             stage,
             tensor,
@@ -570,10 +648,18 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             reused=reused,
             seconds=time.monotonic() - started,
         )
+        base_metadata["stages"][stage["name"]]["sha256"] = _file_digest(
+            output_path / stage["filename"]
+        )
+        if stage["name"] == "struct_reader_swap_target":
+            base_metadata["stages"][stage["name"]]["legacy_sha256"] = _file_digest(
+                output_path / "struct_reader.pt"
+            )
         _atomic_json_dump(base_metadata, metadata_path)
 
     print(f"Path-patching tensors written to {output_path}")
     print(f"Run metadata written to {metadata_path}")
+    _select_circuit(args, output_path)
 
 
 if __name__ == "__main__":

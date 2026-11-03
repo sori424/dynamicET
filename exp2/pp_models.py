@@ -12,9 +12,6 @@ from transformer_lens import HookedTransformer
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerBase
 import torch
 
-# Optional dependency used only by `_load_goat_model`:
-# from peft import PeftModel
-
 def _load_custom_llama_family_model(model_source: str) -> Tuple[HookedTransformer, PreTrainedTokenizerBase]:
     tokenizer = AutoTokenizer.from_pretrained(model_source)
     _ensure_pad_token(tokenizer)
@@ -39,6 +36,11 @@ def _load_custom_llama_family_model(model_source: str) -> Tuple[HookedTransforme
 
 
 def _load_goat_model() -> Tuple[HookedTransformer, PreTrainedTokenizerBase]:
+    try:
+        from peft import PeftModel
+    except ImportError as exc:
+        raise ImportError("Loading GOAT requires the optional 'peft' package.") from exc
+
     base_model = "decapoda-research/llama-7b-hf"
     lora_weights = "tiedong/goat-lora-7b"
     tokenizer = AutoTokenizer.from_pretrained(base_model)

@@ -13,8 +13,8 @@ from exp3.head_config import (
     SYSTEM_PROMPT,
 )
 
-from datasets import datascience
-from datasets.box import Statement
+from dynamicet_data import datascience
+from dynamicet_data.box import Statement
 from exp2 import pp_utils
 import contextlib
 import io

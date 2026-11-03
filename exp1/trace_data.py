@@ -183,7 +183,7 @@ def build_tracing_dataset(
             num_entities=num_entities,
         )
     with _hide_torchvision_imports():
-        from datasets.api import load_vocab
+        from dynamicet_data.api import load_vocab
 
     vocab = load_vocab(vocab_tag, model_tag, split=split, tokenizer=tokenizer)
     clean_context, source_context = build_trace_contexts(
