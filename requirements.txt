@@ -1,0 +1,29 @@
+# Tested dependency set for Python 3.11.
+#
+# Install the PyTorch wheel appropriate for your CUDA/ROCm platform first when
+# the default PyPI wheel is not suitable, then install this file. See:
+# https://pytorch.org/get-started/locally/
+
+# Model execution and mechanistic interpretability
+torch==2.7.1
+transformer-lens==2.16.1
+transformers==4.52.4
+accelerate==1.7.0
+datasets==3.6.0
+sentencepiece==0.2.0
+
+# Tensor manipulation and TransformerLens-facing utilities
+einops==0.8.1
+fancy-einsum==0.0.3
+jaxtyping==0.3.2
+numpy==1.26.4
+pandas==2.2.3
+
+# Experiment CLIs, progress output, and analysis/plotting
+fire==0.7.0
+python-dotenv==1.1.0
+rich==14.0.0
+tqdm==4.67.1
+matplotlib==3.10.3
+seaborn==0.13.2
+spacy==3.8.7
